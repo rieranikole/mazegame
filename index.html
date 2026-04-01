@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>🧩 Maze Challenge</title>
+  <meta name="description" content="Can you solve this maze? Try your skills!">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-dark: #0a0a1a;
+      --bg-card: #12122a;
+      --neon-cyan: #00f0ff;
+      --neon-pink: #ff2d95;
+      --neon-purple: #b429f9;
+      --wall-color: #1a1a3e;
+      --path-color: #0d0d20;
+      --player-glow: #00f0ff;
+      --exit-glow: #39ff14;
+      --text-primary: #e8e8ff;
+      --text-muted: #8888aa;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg-dark);
+      font-family: 'Outfit', sans-serif;
+      color: var(--text-primary);
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+    }
+
+    /* -------- SCREENS -------- */
+    .screen {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: opacity .4s ease;
+      z-index: 1;
+    }
+    .screen.hidden { opacity: 0; pointer-events: none; z-index: 0; }
+
+    /* -------- START SCREEN -------- */
+    #start-screen {
+      background: radial-gradient(ellipse at 50% 30%, #1a1a4a 0%, var(--bg-dark) 70%);
+    }
+    #start-screen h1 {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 60px rgba(0, 240, 255, .3);
+      margin-bottom: .25em;
+    }
+    #start-screen p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      margin-bottom: 2rem;
+    }
+
+    .btn {
+      padding: .85em 2.4em;
+      border: 2px solid var(--neon-cyan);
+      border-radius: 12px;
+      background: transparent;
+      color: var(--neon-cyan);
+      font-family: inherit;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: all .3s ease;
+    }
+    .btn::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: var(--neon-cyan);
+      opacity: 0;
+      transition: opacity .3s ease;
+      z-index: -1;
+    }
+    .btn:hover, .btn:active {
+      color: var(--bg-dark);
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(0, 240, 255, .4);
+    }
+    .btn:hover::before, .btn:active::before { opacity: 1; }
+
+    /* -------- GAME SCREEN -------- */
+    #game-screen {
+      background: var(--bg-dark);
+      padding: 1rem;
+      gap: .75rem;
+    }
+
+    .hud {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      font-size: .95rem;
+      color: var(--text-muted);
+    }
+    .hud span { font-variant-numeric: tabular-nums; }
+    .hud .label { color: var(--neon-cyan); font-weight: 600; }
+
+    #maze-canvas {
+      border: 2px solid rgba(0, 240, 255, .15);
+      border-radius: 8px;
+      box-shadow: 0 0 40px rgba(0, 240, 255, .06);
+      max-width: 94vw;
+      max-height: 70vh;
+      touch-action: none;
+    }
+
+    .mobile-controls {
+      display: none;
+      gap: 6px;
+    }
+    @media (pointer: coarse) {
+      .mobile-controls { display: grid; }
+    }
+    .mobile-controls {
+      grid-template-areas:
+        ". up ."
+        "left down right";
+      grid-template-columns: repeat(3, 56px);
+      grid-template-rows: repeat(2, 56px);
+    }
+    .d-btn {
+      width: 56px; height: 56px;
+      border: 2px solid rgba(0, 240, 255, .3);
+      border-radius: 12px;
+      background: rgba(0, 240, 255, .06);
+      color: var(--neon-cyan);
+      font-size: 1.4rem;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+    .d-btn:active {
+      background: rgba(0, 240, 255, .25);
+      transform: scale(.92);
+    }
+    .d-btn[data-dir="up"]    { grid-area: up; }
+    .d-btn[data-dir="left"]  { grid-area: left; }
+    .d-btn[data-dir="down"]  { grid-area: down; }
+    .d-btn[data-dir="right"] { grid-area: right; }
+
+    .hint {
+      color: var(--text-muted);
+      font-size: .8rem;
+      opacity: .6;
+    }
+
+    /* -------- JUMPSCARE -------- */
+    #scare-screen {
+      background: #000;
+      z-index: 100;
+    }
+    #scare-screen img {
+      width: 100vw; height: 100vh;
+      object-fit: cover;
+      animation: scareIn .08s ease-out;
+    }
+    @keyframes scareIn {
+      0% { transform: scale(3); filter: brightness(4); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+
+    /* -------- POST-SCARE (LMAO SCREEN) -------- */
+    #lmao-screen {
+      background: radial-gradient(ellipse at 50% 40%, #1a0a2e 0%, var(--bg-dark) 70%);
+      gap: 1.5rem;
+      text-align: center;
+      padding: 2rem;
+    }
+    #lmao-screen h1 {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: pulseText 1s ease-in-out infinite alternate;
+    }
+    @keyframes pulseText {
+      from { transform: scale(1); }
+      to { transform: scale(1.06); }
+    }
+    #lmao-screen p {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+    #lmao-screen .stats {
+      background: var(--bg-card);
+      border: 1px solid rgba(0, 240, 255, .12);
+      border-radius: 12px;
+      padding: 1rem 2rem;
+      font-size: .95rem;
+      display: flex; gap: 2rem;
+    }
+    #lmao-screen .stats .val {
+      color: var(--neon-cyan);
+      font-weight: 800;
+      font-size: 1.4rem;
+      display: block;
+    }
+
+    /* -------- QR OVERLAY -------- */
+    #qr-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.85);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 1rem;
+      z-index: 200;
+      backdrop-filter: blur(8px);
+    }
+    #qr-overlay.hidden { display: none; }
+    #qr-overlay canvas { border-radius: 12px; }
+    #qr-overlay p { color: var(--text-muted); font-size: .9rem; }
+
+    /* -------- PARTICLES -------- */
+    .particle {
+      position: fixed;
+      pointer-events: none;
+      border-radius: 50%;
+      animation: floatUp 3s ease-out forwards;
+      z-index: 0;
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-120px) scale(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- START SCREEN -->
+  <div id="start-screen" class="screen">
+    <h1>🧩 Maze Challenge</h1>
+    <p>Find your way to the exit. Think you can do it?</p>
+    <button class="btn" id="play-btn">Play Now</button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen" class="screen hidden">
+    <div class="hud">
+      <div><span class="label">Moves</span> <span id="move-count">0</span></div>
+      <div><span class="label">Time</span> <span id="timer">0:00</span></div>
+    </div>
+    <canvas id="maze-canvas"></canvas>
+    <div class="mobile-controls">
+      <button class="d-btn" data-dir="up">▲</button>
+      <button class="d-btn" data-dir="left">◀</button>
+      <button class="d-btn" data-dir="down">▼</button>
+      <button class="d-btn" data-dir="right">▶</button>
+    </div>
+    <p class="hint">Arrow keys or swipe to move</p>
+  </div>
+
+  <!-- JUMPSCARE SCREEN -->
+  <div id="scare-screen" class="screen hidden">
+    <img src="jumpscare.png" alt="BOO!" id="scare-img">
+  </div>
+
+  <!-- LMAO SCREEN -->
+  <div id="lmao-screen" class="screen hidden">
+    <h1>😂 GOT YOU!</h1>
+    <p>You got absolutely jumpscared lmaooo</p>
+    <div class="stats">
+      <div><span class="val" id="final-moves">0</span>Moves</div>
+      <div><span class="val" id="final-time">0:00</span>Time</div>
+    </div>
+    <button class="btn" id="replay-btn">Play Again 🔁</button>
+    <button class="btn" id="share-btn" style="border-color: var(--neon-pink); color: var(--neon-pink);">Share QR 📱</button>
+  </div>
+
+  <!-- QR OVERLAY -->
+  <div id="qr-overlay" class="hidden">
+    <canvas id="qr-canvas"></canvas>
+    <p>Scan to send to a friend 😈</p>
+    <button class="btn" id="close-qr">Close</button>
+  </div>
+
+  <!-- QR CODE LIB (tiny) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+
+  <script>
+  (() => {
+    /* ===== MAZE GENERATION (Recursive Backtracker) ===== */
+    const COLS = 12, ROWS = 10;
+    let grid, playerX, playerY, exitX, exitY;
+    let moves, startTime, timerInterval;
+    let gameActive = false;
+
+    function cell(x, y) { return grid[y * COLS + x]; }
+
+    function generateMaze() {
+      // Each cell: { walls: {top,right,bottom,left}, visited }
+      grid = [];
+      for (let y = 0; y < ROWS; y++)
+        for (let x = 0; x < COLS; x++)
+          grid.push({ x, y, walls: { top: true, right: true, bottom: true, left: true }, visited: false });
+
+      const stack = [];
+      const start = cell(0, 0);
+      start.visited = true;
+      stack.push(start);
+
+      while (stack.length) {
+        const current = stack[stack.length - 1];
+        const neighbors = getUnvisitedNeighbors(current);
+        if (neighbors.length) {
+          const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+          removeWall(current, next);
+          next.visited = true;
+          stack.push(next);
+        } else {
+          stack.pop();
+        }
+      }
+
+      playerX = 0; playerY = 0;
+      exitX = COLS - 1; exitY = ROWS - 1;
+    }
+
+    function getUnvisitedNeighbors(c) {
+      const n = [];
+      if (c.y > 0 && !cell(c.x, c.y - 1).visited) n.push(cell(c.x, c.y - 1));
+      if (c.x < COLS - 1 && !cell(c.x + 1, c.y).visited) n.push(cell(c.x + 1, c.y));
+      if (c.y < ROWS - 1 && !cell(c.x, c.y + 1).visited) n.push(cell(c.x, c.y + 1));
+      if (c.x > 0 && !cell(c.x - 1, c.y).visited) n.push(cell(c.x - 1, c.y));
+      return n;
+    }
+
+    function removeWall(a, b) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      if (dx === 1) { a.walls.right = false; b.walls.left = false; }
+      if (dx === -1) { a.walls.left = false; b.walls.right = false; }
+      if (dy === 1) { a.walls.bottom = false; b.walls.top = false; }
+      if (dy === -1) { a.walls.top = false; b.walls.bottom = false; }
+    }
+
+    /* ===== RENDERING ===== */
+    const canvas = document.getElementById('maze-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function drawMaze() {
+      const dpr = window.devicePixelRatio || 1;
+      const maxW = Math.min(window.innerWidth * .94, 600);
+      const cellSize = Math.floor(maxW / COLS);
+      const w = cellSize * COLS;
+      const h = cellSize * ROWS;
+
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Background
+      ctx.fillStyle = '#0d0d20';
+      ctx.fillRect(0, 0, w, h);
+
+      const cs = cellSize;
+
+      // Draw cells
+      for (const c of grid) {
+        const x = c.x * cs, y = c.y * cs;
+
+        // Walls
+        ctx.strokeStyle = '#2a2a5e';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+
+        if (c.walls.top)    { ctx.beginPath(); ctx.moveTo(x, y);       ctx.lineTo(x + cs, y);       ctx.stroke(); }
+        if (c.walls.right)  { ctx.beginPath(); ctx.moveTo(x + cs, y);  ctx.lineTo(x + cs, y + cs);  ctx.stroke(); }
+        if (c.walls.bottom) { ctx.beginPath(); ctx.moveTo(x, y + cs);  ctx.lineTo(x + cs, y + cs);  ctx.stroke(); }
+        if (c.walls.left)   { ctx.beginPath(); ctx.moveTo(x, y);       ctx.lineTo(x, y + cs);       ctx.stroke(); }
+      }
+
+      // Exit marker (pulsing green)
+      const ex = exitX * cs, ey = exitY * cs;
+      const pulse = (Math.sin(Date.now() / 300) + 1) / 2;
+      ctx.fillStyle = `rgba(57, 255, 20, ${0.15 + pulse * 0.2})`;
+      ctx.fillRect(ex + 4, ey + 4, cs - 8, cs - 8);
+      ctx.strokeStyle = '#39ff14';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ex + 4, ey + 4, cs - 8, cs - 8);
+
+      // Exit label
+      ctx.fillStyle = '#39ff14';
+      ctx.font = `bold ${cs * 0.35}px Outfit`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('EXIT', ex + cs / 2, ey + cs / 2);
+
+      // Player
+      const px = playerX * cs + cs / 2;
+      const py = playerY * cs + cs / 2;
+      const r = cs * 0.3;
+
+      // Glow
+      const glow = ctx.createRadialGradient(px, py, r * 0.3, px, py, r * 2);
+      glow.addColorStop(0, 'rgba(0, 240, 255, .35)');
+      glow.addColorStop(1, 'rgba(0, 240, 255, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(px - r * 2, py - r * 2, r * 4, r * 4);
+
+      // Player circle
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#00f0ff';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Start label
+      if (playerX === 0 && playerY === 0) {
+        ctx.fillStyle = 'rgba(0, 240, 255, .6)';
+        ctx.font = `${cs * 0.22}px Outfit`;
+        ctx.fillText('YOU', cs / 2, cs * 0.15);
+      }
+    }
+
+    let animFrame;
+    function gameLoop() {
+      drawMaze();
+      animFrame = requestAnimationFrame(gameLoop);
+    }
+
+    /* ===== MOVEMENT ===== */
+    function movePlayer(dx, dy) {
+      if (!gameActive) return;
+      const c = cell(playerX, playerY);
+      if (dx === 0 && dy === -1 && !c.walls.top)    playerY--;
+      else if (dx === 1  && dy === 0  && !c.walls.right)  playerX++;
+      else if (dx === 0  && dy === 1  && !c.walls.bottom) playerY++;
+      else if (dx === -1 && dy === 0  && !c.walls.left)   playerX--;
+      else return; // hit wall
+
+      moves++;
+      document.getElementById('move-count').textContent = moves;
+      spawnParticle();
+
+      if (playerX === exitX && playerY === exitY) {
+        win();
+      }
+    }
+
+    /* ===== CONTROLS ===== */
+    document.addEventListener('keydown', e => {
+      const map = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
+                    w: [0,-1], s: [0,1], a: [-1,0], d: [1,0] };
+      if (map[e.key]) { e.preventDefault(); movePlayer(...map[e.key]); }
+    });
+
+    // D-pad buttons
+    document.querySelectorAll('.d-btn').forEach(btn => {
+      const map = { up: [0,-1], down: [0,1], left: [-1,0], right: [1,0] };
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        movePlayer(...map[btn.dataset.dir]);
+      });
+    });
+
+    // Touch swipe
+    let touchStart = null;
+    canvas.addEventListener('touchstart', e => { touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+    canvas.addEventListener('touchend', e => {
+      if (!touchStart) return;
+      const dx = e.changedTouches[0].clientX - touchStart.x;
+      const dy = e.changedTouches[0].clientY - touchStart.y;
+      const absDx = Math.abs(dx), absDy = Math.abs(dy);
+      if (Math.max(absDx, absDy) < 20) return;
+      if (absDx > absDy) movePlayer(dx > 0 ? 1 : -1, 0);
+      else movePlayer(0, dy > 0 ? 1 : -1);
+      touchStart = null;
+    });
+
+    /* ===== TIMER ===== */
+    function updateTimer() {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const m = Math.floor(elapsed / 60);
+      const s = (elapsed % 60).toString().padStart(2, '0');
+      document.getElementById('timer').textContent = `${m}:${s}`;
+    }
+
+    /* ===== PARTICLES ===== */
+    function spawnParticle() {
+      const el = document.createElement('div');
+      el.className = 'particle';
+      const size = 4 + Math.random() * 6;
+      el.style.width = el.style.height = size + 'px';
+      el.style.background = Math.random() > .5 ? 'var(--neon-cyan)' : 'var(--neon-pink)';
+      el.style.left = (Math.random() * window.innerWidth) + 'px';
+      el.style.top = (Math.random() * window.innerHeight) + 'px';
+      document.body.appendChild(el);
+      el.addEventListener('animationend', () => el.remove());
+    }
+
+    /* ===== SCREENS ===== */
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    /* ===== WIN → JUMPSCARE ===== */
+    function win() {
+      gameActive = false;
+      clearInterval(timerInterval);
+      cancelAnimationFrame(animFrame);
+
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const m = Math.floor(elapsed / 60);
+      const s = (elapsed % 60).toString().padStart(2, '0');
+      const timeStr = `${m}:${s}`;
+
+      // Brief delay to let them feel the "win"
+      setTimeout(() => {
+        // JUMPSCARE!
+        showScreen('scare-screen');
+        playScareSound();
+
+        // After 2 seconds, show the LMAO screen
+        setTimeout(() => {
+          showScreen('lmao-screen');
+          document.getElementById('final-moves').textContent = moves;
+          document.getElementById('final-time').textContent = timeStr;
+        }, 2000);
+      }, 400);
+    }
+
+    /* ===== SCARE SOUND (generated) ===== */
+    function playScareSound() {
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const dur = 0.6;
+
+        // Noise burst
+        const bufferSize = ac.sampleRate * dur;
+        const noiseBuffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.8;
+
+        const noise = ac.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const noiseGain = ac.createGain();
+        noiseGain.gain.setValueAtTime(0.7, ac.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + dur);
+        noise.connect(noiseGain).connect(ac.destination);
+        noise.start();
+
+        // Low rumble
+        const osc = ac.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(80, ac.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, ac.currentTime + 0.1);
+        const oscGain = ac.createGain();
+        oscGain.gain.setValueAtTime(0.5, ac.currentTime);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + dur);
+        osc.connect(oscGain).connect(ac.destination);
+        osc.start();
+        osc.stop(ac.currentTime + dur);
+      } catch(e) {
+        // Audio not available, no big deal
+      }
+    }
+
+    /* ===== START GAME ===== */
+    function startGame() {
+      generateMaze();
+      moves = 0;
+      document.getElementById('move-count').textContent = '0';
+      startTime = Date.now();
+      timerInterval = setInterval(updateTimer, 1000);
+      gameActive = true;
+      showScreen('game-screen');
+      gameLoop();
+    }
+
+    document.getElementById('play-btn').addEventListener('click', startGame);
+    document.getElementById('replay-btn').addEventListener('click', startGame);
+
+    /* ===== QR CODE ===== */
+    document.getElementById('share-btn').addEventListener('click', () => {
+      const url = window.location.href;
+      const qrCanvas = document.getElementById('qr-canvas');
+      QRCode.toCanvas(qrCanvas, url, {
+        width: 220,
+        margin: 2,
+        color: { dark: '#00f0ff', light: '#0a0a1a' }
+      }, err => {
+        if (err) console.error(err);
+      });
+      document.getElementById('qr-overlay').classList.remove('hidden');
+    });
+
+    document.getElementById('close-qr').addEventListener('click', () => {
+      document.getElementById('qr-overlay').classList.add('hidden');
+    });
+  })();
+  </script>
+</body>
+</html>
